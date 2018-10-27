@@ -24,7 +24,10 @@ void SafeBuffer::push(string str) {
 	Is this function thread-safe???
 	Make necessary modifications to make it thread-safe
 	*/
+	//lock
+	//push
 	q.push (str);
+	//unlock
 }
 
 string SafeBuffer::pop() {
@@ -32,7 +35,10 @@ string SafeBuffer::pop() {
 	Is this function thread-safe???
 	Make necessary modifications to make it thread-safe
 	*/
+	// lock
+	//pop
 	string s = q.front();
 	q.pop();
+	//lock
 	return s;
 }

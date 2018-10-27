@@ -35,6 +35,16 @@
 #include "Histogram.h"
 using namespace std;
 
+pthread_mutex_t mtx;
+
+struct arguments
+{
+	string name;
+	int n;
+	int w;
+	SafeBuffer* request_buffer;
+	Histogram* hist;
+};
 
 void* request_thread_function(void* arg) {
 	/*
@@ -50,10 +60,20 @@ void* request_thread_function(void* arg) {
 		the data requests are being pushed: you MAY NOT
 		create 3 copies of this function, one for each "patient".
 	 */
+	arguments* args = (arguments*) arg;
+	string name = args->name;
+	int n = args->n;
+	int w = args->w;
+	string Data_with_name = "data "+ args->name;
+	cout <<"pushing: "<< Data_with_name << endl;
+    for(int i = 0; i < n; ++i) {
+    	pthread_mutex_lock(&mtx);
+        args->request_buffer->push(Data_with_name);
+        pthread_mutex_unlock(&mtx);
+    }
+    cout << "Done populating request buffer" << endl;
 
-	for(;;) {
-
-	}
+    return NULL;
 }
 
 void* worker_thread_function(void* arg) {
@@ -95,7 +115,27 @@ int main(int argc, char * argv[]) {
                 break;
 			}
     }
-
+    // get args ready
+    arguments* args = new arguments();
+    args->n = n;
+    args->w = w;
+    SafeBuffer* request_buffer = new SafeBuffer();
+	Histogram* hist = new Histogram();
+	args->request_buffer = request_buffer;
+	args->hist = hist;
+	args->name = "John Smith";
+	arguments* args1 = new arguments();
+    args1->n = n;
+    args1->w = w;
+	args1->request_buffer = request_buffer;
+	args1->hist = hist;
+	args1->name = "Jane Smith";
+	arguments* args2 = new arguments();
+    args2->n = n;
+    args2->w = w;
+	args2->request_buffer = request_buffer;
+	args2->hist = hist;
+	args2->name = "Joe Smith";
     int pid = fork();
 	if (pid == 0){
 		execl("dataserver", (char*) NULL);
@@ -110,29 +150,36 @@ int main(int argc, char * argv[]) {
         RequestChannel *chan = new RequestChannel("control", RequestChannel::CLIENT_SIDE);
         cout << "done." << endl<< flush;
 
-		SafeBuffer request_buffer;
-		Histogram hist;
+        // request thread
 
-        for(int i = 0; i < n; ++i) {
-            request_buffer.push("data John Smith");
-            request_buffer.push("data Jane Smith");
-            request_buffer.push("data Joe Smith");
-        }
-        cout << "Done populating request buffer" << endl;
+        // create threads
+        pthread_mutex_init(&mtx, NULL);
+        pthread_t thread1;
+        pthread_t thread2;
+        pthread_t thread3;
+        
+        pthread_create(&thread1,NULL,request_thread_function, args);
+		pthread_create(&thread2,NULL,request_thread_function, args1);
+		pthread_create(&thread3,NULL,request_thread_function, args2);
 
-        cout << "Pushing quit requests... ";
-        for(int i = 0; i < w; ++i) {
-            request_buffer.push("quit");
-        }
-        cout << "done." << endl;
+        pthread_join(thread1, NULL);
+        pthread_join(thread2, NULL);
+        pthread_join(thread3, NULL);
+        cout <<"All threads joined.\n";
+		// worker thread
 
-	
+        cout << "Pushing quit requests... ";	    
+	    for(int i = 0; i < w; ++i) {
+	        args->request_buffer->push("quit");
+	    }
+	    cout << "done." << endl;
+
         chan->cwrite("newchannel");
 		string s = chan->cread ();
         RequestChannel *workerChannel = new RequestChannel(s, RequestChannel::CLIENT_SIDE);
 
         while(true) {
-            string request = request_buffer.pop();
+            string request = args->request_buffer->pop();
 			workerChannel->cwrite(request);
 
 			if(request == "quit") {
@@ -140,13 +187,13 @@ int main(int argc, char * argv[]) {
                 break;
             }else{
 				string response = workerChannel->cread();
-				hist.update (request, response);
+				args->hist->update (request, response);
 			}
         }
         chan->cwrite ("quit");
         delete chan;
         cout << "All Done!!!" << endl; 
 
-		hist.print ();
+		args->hist->print ();
     }
 }
