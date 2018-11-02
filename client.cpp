@@ -90,10 +90,20 @@ void* worker_thread_function(void* arg) {
 		and that you send a "quit" request for every
 		RequestChannel you construct regardless of
 		whether you used "new" for it.
-     */
+ 	*/
+    RequestChannel *workerChannel = new RequestChannel(s, RequestChannel::CLIENT_SIDE);
 
     while(true) {
+        string request = args->request_buffer->pop();
+		workerChannel->cwrite(request);
 
+		if(request == "quit") {
+		   	delete workerChannel;
+            break;
+        }else{
+			string response = workerChannel->cread();
+			args->hist->update (request, response);
+		}
     }
 }
 
@@ -176,20 +186,8 @@ int main(int argc, char * argv[]) {
 
         chan->cwrite("newchannel");
 		string s = chan->cread ();
-        RequestChannel *workerChannel = new RequestChannel(s, RequestChannel::CLIENT_SIDE);
+		// call threading
 
-        while(true) {
-            string request = args->request_buffer->pop();
-			workerChannel->cwrite(request);
-
-			if(request == "quit") {
-			   	delete workerChannel;
-                break;
-            }else{
-				string response = workerChannel->cread();
-				args->hist->update (request, response);
-			}
-        }
         chan->cwrite ("quit");
         delete chan;
         cout << "All Done!!!" << endl; 
